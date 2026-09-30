@@ -1,0 +1,217 @@
+"""
+grafo.py
+
+Matemática Discreta - IMAT
+ICAI, Universidad Pontificia Comillas
+
+Grupo: GP305
+Integrantes:
+    - Miriam Mingo Revuelta
+    - Angela Porres Cobb
+
+Descripción:
+Librería para el análisis de grafos pesados.
+"""
+
+from typing import List,Tuple,Dict,Callable,Union
+import networkx as nx
+import sys
+
+import heapq #Librería para la creación de colas de prioridad
+
+INFTY=sys.float_info.max #Distincia "infinita" entre nodos de un grafo
+
+"""
+En las siguientes funciones, las funciones de peso son funciones que reciben un grafo o digrafo y dos vértices y devuelven un real (su peso)
+Por ejemplo, si las aristas del grafo contienen en sus datos un campo llamado 'valor', una posible función de peso sería:
+
+def mi_peso(G:nx.Graph,u:object, v:object):
+    return G[u][v]['valor']
+
+y, en tal caso, para calcular Dijkstra con dicho parámetro haríamos
+
+camino=dijkstra(G,mi_peso,origen, destino)
+"""
+
+def dijkstra(G:Union[nx.Graph, nx.DiGraph], peso:Union[Callable[[nx.Graph,object,object],float], Callable[[nx.DiGraph,object,object],float]], origen:object)-> Dict[object,object]:
+    """ Calcula un Árbol de Caminos Mínimos para el grafo pesado partiendo
+    del vértice "origen" usando el algoritmo de Dijkstra. Calcula únicamente
+    el árbol de la componente conexa que contiene a "origen".
+    
+    Args:
+        origen (object): vértice del grafo de origen
+    Returns:
+        Dict[object,object]: Devuelve un diccionario que indica, para cada vértice alcanzable
+            desde "origen", qué vértice es su padre en el árbol de caminos mínimos.
+    Raises:
+        TypeError: Si origen no es "hashable".
+    Example:
+        Si G.dijksra(1)={2:1, 3:2, 4:1} entonces 1 es padre de 2 y de 4 y 2 es padre de 3.
+        En particular, un camino mínimo desde 1 hasta 3 sería 1->2->3.
+    """
+    # Inicializamos las listas de padres, distancias y visitados
+    padre = {}
+    visitado = {}
+    d = {}
+    for v in G.nodes:
+        padre[v] = None
+        visitado[v] = False
+        d[v] = INFTY
+
+    d[origen] = 0
+
+    contador = 0 # Inicializamos un contador para que en caso de empate de distancia, pudiendo eligir cualquiera de los dos, elija la primera
+    # Inicializamos la lista de prioridad Q ordenada por d (min-heap)
+    Q = [(0, contador, origen)]  # (distancia, contador, vértice)
+
+    while Q:
+        dist_v,_, v = heapq.heappop(Q)
+
+        if not visitado[v]:
+            visitado[v] = True
+            for x in G.neighbors(v):
+                w_v_x = peso(G, v, x)
+                if d[x] > d[v] + w_v_x:
+                    d[x] = d[v] + w_v_x
+                    padre[x] = v
+                    contador += 1
+                    heapq.heappush(Q, (d[x], contador, x))
+    return padre
+
+
+def camino_minimo(G:Union[nx.Graph, nx.DiGraph], peso:Union[Callable[[nx.Graph,object,object],float], Callable[[nx.DiGraph,object,object],float]] ,origen:object,destino:object)->List[object]:
+    """ Calcula el camino mínimo desde el vértice origen hasta el vértice
+    destino utilizando el algoritmo de Dijkstra.
+    
+    Args:
+        G (nx.Graph o nx.Digraph): grafo a grado dirigido
+        peso (función): función que recibe un grafo o grafo dirigido y dos vértices del mismo y devuelve el peso de la arista que los conecta
+        origen (object): vértice del grafo de origen
+        destino (object): vértice del grafo de destino
+    Returns:
+        List[object]: Devuelve una lista con los vértices del grafo por los que pasa
+            el camino más corto entre el origen y el destino. El primer elemento de
+            la lista es origen y el último destino.
+    Example:
+        Si dijksra(G,peso,1,4)=[1,5,2,4] entonces el camino más corto en G entre 1 y 4 es 1->5->2->4.
+    Raises:
+        TypeError: Si origen o destino no son "hashable".
+    """
+    # Ejecutamos Dijkstra para obtener los padres y distancias
+    padre = dijkstra(G, peso, origen)
+
+    # Si destino no es alcanzable, su padre seguirá siendo None y no es el origen
+    if padre[destino] is None and destino != origen:
+        return []
+
+    # Reconstruimos el camino desde destino hasta origen
+    camino = []
+    actual = destino
+
+    while actual is not None:
+        camino.append(actual)
+        actual = padre[actual]
+
+    # Damos la vuelta para que el camino inicie en el origen
+    camino.reverse()
+    return camino
+
+
+def prim(G:nx.Graph, peso:Callable[[nx.Graph,object,object],float])-> Dict[object,object]:
+    """ Calcula un Árbol Abarcador Mínimo para el grafo pesado
+    usando el algoritmo de Prim.
+    
+    Args: None
+    Returns:
+        G (nx.Graph): grafo
+        peso (función): función que recibe un grafo y dos vértices del grafo y devuelve el peso de la arista que los conecta
+        Dict[object,object]: Devuelve un diccionario que indica, para cada vértice del
+            grafo, qué vértice es su padre en el árbol abarcador mínimo.
+    Raises: None
+    Example:
+        Si prim(G,peso)={1: None, 2:1, 3:2, 4:1} entonces en un árbol abarcador mínimo tenemos que:
+            1 es una raíz (no tiene padre)
+            1 es padre de 2 y de 4
+            2 es padre de 3
+    """
+    # Inicializamos las listas de padres y costes mínimos de aristas de cada vértice
+    padre = {}
+    coste_minimo = {}
+
+    for v in G.nodes:
+        padre[v] = None
+        coste_minimo[v] = INFTY
+
+    en_Q = set(G.nodes) # Conjunto de todos los vértices que aún no se han procesado
+    primer_nodo = list(G.nodes)[0]  # Primer nodo cuyo coste será 0
+    coste_minimo[primer_nodo] = 0
+
+    contador = 0
+    # Inicializamos lista de prioridad Q ordenada por coste mínimo
+    Q = [(0,contador,primer_nodo)]
+
+    while en_Q:
+        coste_v, _,  v = heapq.heappop(Q)  # Extraemos v de menor coste_minimo
+        # Primero, tenemos que ver si el vertice se ha explorado ya o no
+        while v not in en_Q:
+            coste_v, _, v = heapq.heappop(Q)  # Para poder extrare el elemento con coste mínimo que no se haya explorado
+
+        en_Q.remove(v)  # eliminamos el vertice v 
+
+        # Para cada vecino x de v que este todavía en Q
+        for x in G.neighbors(v):
+            if x in en_Q:
+                w_v_x = peso(G, v, x)
+                # Si w(v,x) es menor que el coste mínimo actual de x 
+                if w_v_x < coste_minimo[x]:
+                    coste_minimo[x] = w_v_x
+                    padre[x] = v
+
+                    contador += 1
+                    heapq.heappush(Q, (coste_minimo[x], contador, x))   # Actualizamos el peso de x en la cola de prioridad
+    return padre
+                
+
+def kruskal(G:nx.Graph, peso:Callable[[nx.Graph,object,object],float])-> List[Tuple[object,object]]:
+    """ Calcula un Árbol Abarcador Mínimo para el grafo
+    usando el algoritmo de Kruskal.
+    
+    Args:
+        G (nx.Graph): grafo
+        peso (función): función que recibe un grafo y dos vértices del grafo y devuelve el peso de la arista que los conecta
+    Returns:
+        List[Tuple[object,object]]: Devuelve una lista [(s1,t1),(s2,t2),...,(sn,tn)]
+            de los pares de vértices del grafo que forman las aristas
+            del arbol abarcador mínimo.
+    Raises: None
+    Example:
+        En el ejemplo anterior en que prim(G,peso)={1:None, 2:1, 3:2, 4:1} podríamos tener, por ejemplo,
+        kruskal(G,peso)=[(1,2),(1,4),(3,2)]
+    """
+
+    # Creamos lista de aristas L ordenada por peso c
+    Lista_aristas = sorted(G.edges, key=lambda e: peso(G, e[0], e[1]))
+
+    C = {}
+    for v in G.nodes:
+        C[v] = {v}
+
+    aristas_aam = []
+
+    while Lista_aristas:
+        u, v = Lista_aristas.pop(0)  # Extraemos la arista de menor peso
+
+        if C[u] != C[v]:
+            # Agregamos arista al árbol abarcador mínimo
+            aristas_aam.append((u, v))
+
+            # Unificamos las componentes: C[u] = C[u] ∪ C[v]
+            nueva_comp = C[u] | C[v]
+
+            # Actualizamos todos los vértices 
+            for w in C[u]:
+                C[w] = nueva_comp
+            for w in C[v]:
+                C[w] = nueva_comp
+
+    return aristas_aam
